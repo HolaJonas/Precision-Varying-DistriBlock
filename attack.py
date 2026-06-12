@@ -71,9 +71,12 @@ from defense import Detector
 
 logger = logging.getLogger(__name__)
 
+
 class Stage(Enum):
     """Simple enum to track stage of experiments."""
+
     ATTACK = auto()
+
 
 # Define training procedure
 class ASR(sb.Brain):
@@ -86,7 +89,7 @@ class ASR(sb.Brain):
         # print(f"precision {hparams["precision"]}, eval precision {hparams["eval_precision"]}")
         # print(f"[wavs] dtype: {wavs.dtype}, autocast: {torch.is_autocast_enabled()}")
         # print(next(self.modules.wav2vec2.parameters()).dtype, next(self.modules.enc.parameters()).dtype, next(self.modules.ctc_lin.parameters()).dtype)
-        
+
         # Downsample the inputs if specified
         if hasattr(self.modules, "downsampler"):
             wavs = self.modules.downsampler(wavs)
@@ -120,9 +123,7 @@ class ASR(sb.Brain):
         # print(f"[logits] dtype: {logits.dtype}, autocast: {torch.is_autocast_enabled()}")
         # Upsample the inputs if they have been highly downsampled
         if hasattr(self.hparams, "upsampling") and self.hparams.upsampling:
-            logits = logits.view(
-                logits.shape[0], -1, self.hparams.output_neurons
-            )
+            logits = logits.view(logits.shape[0], -1, self.hparams.output_neurons)
 
         p_ctc = self.hparams.log_softmax(logits)
         # print(f"[p_ctc] dtype: {p_ctc.dtype}, autocast: {torch.is_autocast_enabled()}")
@@ -130,7 +131,7 @@ class ASR(sb.Brain):
             p_tokens = sb.decoders.ctc_greedy_decode(
                 p_ctc.detach(), wav_lens, blank_id=self.hparams.blank_index
             )
-        
+
         elif stage == sb.Stage.TEST:
             p_tokens = test_searcher(p_ctc.detach(), wav_lens)
 
@@ -157,18 +158,14 @@ class ASR(sb.Brain):
         if stage == sb.Stage.VALID:
             # Decode token terms to words
             predicted_words = self.tokenizer(predicted_tokens, task="decode_from_list")
-            
+
         elif stage == sb.Stage.TEST:
             if hasattr(self.hparams, "rescorer"):
-                predicted_words = [
-                    hyp[0].split(" ") for hyp in predicted_tokens
-                ]
+                predicted_words = [hyp[0].split(" ") for hyp in predicted_tokens]
             else:
-                predicted_words = [
-                    hyp[0].text.split(" ") for hyp in predicted_tokens
-                ]
+                predicted_words = [hyp[0].text.split(" ") for hyp in predicted_tokens]
 
-        if stage != sb.Stage.TRAIN and stage !=Stage.ATTACK:
+        if stage != sb.Stage.TRAIN and stage != Stage.ATTACK:
             target_words = undo_padding(tokens, tokens_lens)
             target_words = self.tokenizer(target_words, task="decode_from_list")
             self.wer_metric.append(ids, predicted_words, target_words)
@@ -200,9 +197,7 @@ class ASR(sb.Brain):
             old_lr_wav2vec, new_lr_wav2vec = self.hparams.lr_annealing_wav2vec(
                 stage_stats["loss"]
             )
-            sb.nnet.schedulers.update_learning_rate(
-                self.model_optimizer, new_lr_model
-            )
+            sb.nnet.schedulers.update_learning_rate(self.model_optimizer, new_lr_model)
             if not self.hparams.wav2vec2.freeze:
                 sb.nnet.schedulers.update_learning_rate(
                     self.wav2vec_optimizer, new_lr_wav2vec
@@ -226,9 +221,7 @@ class ASR(sb.Brain):
                 test_stats=stage_stats,
             )
             if if_main_process():
-                with open(
-                    self.hparams.test_wer_file, "w", encoding="utf-8"
-                ) as w:
+                with open(self.hparams.test_wer_file, "w", encoding="utf-8") as w:
                     self.wer_metric.write_stats(w)
 
     def init_optimizers(self):
@@ -240,9 +233,7 @@ class ASR(sb.Brain):
                 self.modules.wav2vec2.parameters()
             )
             if self.checkpointer is not None:
-                self.checkpointer.add_recoverable(
-                    "wav2vec_opt", self.wav2vec_optimizer
-                )
+                self.checkpointer.add_recoverable("wav2vec_opt", self.wav2vec_optimizer)
 
         self.model_optimizer = self.hparams.model_opt_class(
             self.hparams.model.parameters()
@@ -261,12 +252,14 @@ class ASR(sb.Brain):
 
     def _initialize_vars(self):
         self.eps = 1  # 0.05
-        self.max_iter_1 = 1000 # 4000  # 4000 # 10
+        self.max_iter_1 = 1000  # 4000  # 4000 # 10
         self.learning_rate_1 = 0.002  # 0.001
         self.global_max_length = 562480  # Need to check max length file!
         self.initial_rescale = 1.0
         self.decrease_factor_eps = 0.5  # 0.8
-        self.num_iter_decrease_eps = 1  # 10  # In the code is 1, check it!, with one it checks every time
+        self.num_iter_decrease_eps = (
+            1  # 10  # In the code is 1, check it!, with one it checks every time
+        )
         self.clip_min = None
         self.clip_max = None
         self.const = 10  # 1.0
@@ -274,7 +267,6 @@ class ASR(sb.Brain):
         self.optimizer = None
         self.alpha = 0.3
         self._optimizer_arg_1 = None
-
 
     ########## Initialize Detectors
 
@@ -309,7 +301,7 @@ class ASR(sb.Brain):
             f"Loaded 3D Gaussian detector: mean={self.gaussian_mean_pure.cpu().numpy()}, "
             f"cov={self.gaussian_cov_pure.cpu().numpy()}"
         )
-    
+
     def _init_detector_separate_gaussian(self):
         """Load 2d Gaussian Detector with X=(PVP score, Mean Entropy) -> Mean, Covariance"""
         gaussian_path = getattr(
@@ -318,7 +310,10 @@ class ASR(sb.Brain):
             "PLACEHOLDER",
         )
 
-        if hasattr(self, "gaussian_mean_separate") and self.gaussian_mean_separate is not None:
+        if (
+            hasattr(self, "gaussian_mean_separate")
+            and self.gaussian_mean_separate is not None
+        ):
             return
 
         if not os.path.exists(gaussian_path):
@@ -346,7 +341,10 @@ class ASR(sb.Brain):
             "PLACEHOLDER",
         )
 
-        if hasattr(self, "detector_separate_nn") and self.detector_separate_nn is not None:
+        if (
+            hasattr(self, "detector_separate_nn")
+            and self.detector_separate_nn is not None
+        ):
             return
 
         self.detector_separate_nn = Detector(input_dim=2, hidden_dim=8).to(self.device)
@@ -355,12 +353,18 @@ class ASR(sb.Brain):
             p.requires_grad_(False)
 
         if os.path.exists(detector_path):
-            state = torch.load(detector_path, map_location=self.device, weights_only=False)
+            state = torch.load(
+                detector_path, map_location=self.device, weights_only=False
+            )
             self.detector_separate_nn.load_state_dict(state["model"])
             self.detector_separate_threshold = state.get("threshold", 0.5)
-            logger.info(f"Loaded NN detector (separate, input_dim=2) from {detector_path}")
+            logger.info(
+                f"Loaded NN detector (separate, input_dim=2) from {detector_path}"
+            )
         else:
-            logger.warning(f"NN detector (separate) not found at {detector_path}. Using untrained.")
+            logger.warning(
+                f"NN detector (separate) not found at {detector_path}. Using untrained."
+            )
             self.detector_separate_threshold = 0.5
 
     def _init_detector_pure_nn(self):
@@ -380,32 +384,35 @@ class ASR(sb.Brain):
             p.requires_grad_(False)
 
         if os.path.exists(detector_path):
-            state = torch.load(detector_path, map_location=self.device, weights_only=False)
+            state = torch.load(
+                detector_path, map_location=self.device, weights_only=False
+            )
             self.detector_pure_nn.load_state_dict(state["model"])
             self.detector_pure_threshold = state.get("threshold", 0.5)
             logger.info(f"Loaded NN detector (pure, input_dim=3) from {detector_path}")
         else:
-            logger.warning(f"NN detector (pure) not found at {detector_path}. Using untrained.")
+            logger.warning(
+                f"NN detector (pure) not found at {detector_path}. Using untrained."
+            )
             self.detector_pure_threshold = 0.5
 
-####################
+    ####################
 
     def attack(
-            self,
-            train_set,
-            max_key=None,
-            min_key=None,            
-            hparams=None,
-            progressbar=None,
-            train_loader_kwargs={},
+        self,
+        train_set,
+        max_key=None,
+        min_key=None,
+        hparams=None,
+        progressbar=None,
+        train_loader_kwargs={},
     ):
-       
+
         if progressbar is None:
             progressbar = not self.noprogressbar
 
         if not (
-                isinstance(train_set, DataLoader)
-                or isinstance(train_set, LoopedLoader)
+            isinstance(train_set, DataLoader) or isinstance(train_set, LoopedLoader)
         ):
             train_loader_kwargs["ckpt_prefix"] = None
             train_set = self.make_dataloader(
@@ -433,7 +440,9 @@ class ASR(sb.Brain):
             self._initialize_vars()
             batch = batch.to(self.device)
             # First reset delta
-            global_optimal_delta = torch.zeros(batch.batchsize, self.global_max_length).to(self.device)
+            global_optimal_delta = torch.zeros(
+                batch.batchsize, self.global_max_length
+            ).to(self.device)
             self.global_optimal_delta = nn.Parameter(global_optimal_delta)
             # Next, reset optimizers
             if self._optimizer_arg_1 is None:
@@ -452,9 +461,9 @@ class ASR(sb.Brain):
                 save_dirct = os.path.join(root_path, file_name)
                 save_dirct = save_dirct.replace(".flac", ".wav")
 
-                if (not os.path.exists(save_dirct)):                    
+                if not os.path.exists(save_dirct):
                     self.attack_1st_stage(batch, hparams, save_dirct)
-    
+
     def attack_1st_stage(self, batch, hparams, save_dirct):
         """
         The first stage of the attack.
@@ -467,8 +476,8 @@ class ASR(sb.Brain):
         local_max_length = np.max(real_lengths)
         # Initialize rescale
         rescale = (
-                np.ones([local_batch_size, local_max_length], dtype=np.float32)
-                * self.initial_rescale
+            np.ones([local_batch_size, local_max_length], dtype=np.float32)
+            * self.initial_rescale
         )
         # Reformat input
         input_mask = np.zeros([local_batch_size, local_max_length], dtype=np.float32)
@@ -482,11 +491,12 @@ class ASR(sb.Brain):
         first_hit = [None] * local_batch_size
         best_hit = [None] * local_batch_size
         best_eta = [None] * local_batch_size
-        token_lenghts = (batch.tokens[1] * batch.tokens[0].size(1)).long().detach().cpu().numpy()
+        token_lenghts = (
+            (batch.tokens[1] * batch.tokens[0].size(1)).long().detach().cpu().numpy()
+        )
         count_succs = [None] * local_batch_size
         best_loss_2nd_stage = [np.inf] * local_batch_size
         best_score = [None] * local_batch_size
-
 
         for iter_1st_stage_idx in range(self.max_iter_1):
             self.optimizer_1.zero_grad()
@@ -497,11 +507,13 @@ class ASR(sb.Brain):
                 "hybrid_separate_gaussian": self.forward_1st_stage_adaptive_separate_gaussian,
                 "hybrid_separate": self.forward_1st_stage_adaptive_separate_nn,
             }
-            forward_fn = forward_fn_map.get(self.attack_type, self.forward_1st_stage_adaptive_pure_gaussian)
+            forward_fn = forward_fn_map.get(
+                self.attack_type, self.forward_1st_stage_adaptive_pure_gaussian
+            )
 
             (
                 loss,
-                loss_2, 
+                loss_2,
                 characteristic,
                 local_delta,
                 masked_adv_input,
@@ -521,40 +533,68 @@ class ASR(sb.Brain):
             self.optimizer_1.step()
 
             for local_batch_size_idx in range(local_batch_size):
-                almost_successful[local_batch_size_idx] = masked_adv_input[local_batch_size_idx]
-                torchaudio.save("tmp.wav", almost_successful[local_batch_size_idx][ :real_lengths[local_batch_size_idx]].detach().cpu()[None, :], self.sample_rate)
+                almost_successful[local_batch_size_idx] = masked_adv_input[
+                    local_batch_size_idx
+                ]
+                torchaudio.save(
+                    "tmp.wav",
+                    almost_successful[local_batch_size_idx][
+                        : real_lengths[local_batch_size_idx]
+                    ]
+                    .detach()
+                    .cpu()[None, :],
+                    self.sample_rate,
+                )
                 data_adv, _ = torchaudio.load("tmp.wav")
-                batch.sig[0][local_batch_size_idx][:real_lengths[local_batch_size_idx]] = data_adv
-            
+                batch.sig[0][local_batch_size_idx][
+                    : real_lengths[local_batch_size_idx]
+                ] = data_adv
+
             _, _, best_hyps = self.compute_forward(batch, stage=sb.Stage.TEST)
 
             for local_batch_size_idx in range(local_batch_size):
                 tokens = (
-                    batch.tokens[0][local_batch_size_idx,  0:token_lenghts[local_batch_size_idx]]
+                    batch.tokens[0][
+                        local_batch_size_idx, 0 : token_lenghts[local_batch_size_idx]
+                    ]
                     .detach()
                     .cpu()
                     .numpy()
                     .reshape(-1)
                 )
                 pred_test = np.array(best_hyps[local_batch_size_idx])
-                if len(pred_test) == len(tokens) and (pred_test == tokens).all():  
-                    if (loss_2.detach() < best_loss_2nd_stage[local_batch_size_idx]): 
+                if len(pred_test) == len(tokens) and (pred_test == tokens).all():
+                    if loss_2.detach() < best_loss_2nd_stage[local_batch_size_idx]:
                         best_loss_2nd_stage[local_batch_size_idx] = loss_2.detach()
-                        self.alpha = min(self.alpha*1.2, 0.999999999)
-                        best_eta[local_batch_size_idx] = rescale[local_batch_size_idx] * self.eps
+                        self.alpha = min(self.alpha * 1.2, 0.999999999)
+                        best_eta[local_batch_size_idx] = (
+                            rescale[local_batch_size_idx] * self.eps
+                        )
 
                         if iter_1st_stage_idx > 30:
                             max_local_delta = np.max(
-                                np.abs(local_delta[local_batch_size_idx].detach().cpu().numpy())
+                                np.abs(
+                                    local_delta[local_batch_size_idx]
+                                    .detach()
+                                    .cpu()
+                                    .numpy()
+                                )
                             )
-                            if (rescale[local_batch_size_idx][0] * self.eps > max_local_delta):
-                                rescale[local_batch_size_idx] = max_local_delta / self.eps
+                            if (
+                                rescale[local_batch_size_idx][0] * self.eps
+                                > max_local_delta
+                            ):
+                                rescale[local_batch_size_idx] = (
+                                    max_local_delta / self.eps
+                                )
                             rescale[local_batch_size_idx] *= self.decrease_factor_eps
 
                         # Save the best adversarial example
                         if successful_adv_input_2[local_batch_size_idx] is None:
                             first_hit[local_batch_size_idx] = iter_1st_stage_idx
-                        successful_adv_input_2[local_batch_size_idx] = masked_adv_input[local_batch_size_idx]
+                        successful_adv_input_2[local_batch_size_idx] = masked_adv_input[
+                            local_batch_size_idx
+                        ]
                         best_hit[local_batch_size_idx] = iter_1st_stage_idx
                         if count_succs[local_batch_size_idx] is None:
                             count_succs[local_batch_size_idx] = 1
@@ -564,33 +604,65 @@ class ASR(sb.Brain):
 
             # If attack is unsuccessful
             if iter_1st_stage_idx == self.max_iter_1 - 1:
-                for (local_batch_size_idx, dirct) in enumerate(batch.path):
+                for local_batch_size_idx, dirct in enumerate(batch.path):
                     if successful_adv_input_2[local_batch_size_idx] is None:
-                        successful_adv_input_2[local_batch_size_idx] = masked_adv_input[local_batch_size_idx]
-                        with open(hparams["unsuccesfull_adapt"], 'a') as myfile:
-                            wr = csv.writer(myfile)                            
-                            wr.writerow([[dirct], [first_hit[local_batch_size_idx]], [best_hit[local_batch_size_idx]], 
-                                [best_eta[local_batch_size_idx]], [count_succs[local_batch_size_idx]], [self.alpha], [characteristic.cpu().detach().item()]])
+                        successful_adv_input_2[local_batch_size_idx] = masked_adv_input[
+                            local_batch_size_idx
+                        ]
+                        with open(hparams["unsuccesfull_adapt"], "a") as myfile:
+                            wr = csv.writer(myfile)
+                            wr.writerow(
+                                [
+                                    [dirct],
+                                    [first_hit[local_batch_size_idx]],
+                                    [best_hit[local_batch_size_idx]],
+                                    [best_eta[local_batch_size_idx]],
+                                    [count_succs[local_batch_size_idx]],
+                                    [self.alpha],
+                                    [characteristic.cpu().detach().item()],
+                                ]
+                            )
                             myfile.close()
                     else:
-                        with open(hparams["succesfull_adapt"], 'a') as myfile:
+                        with open(hparams["succesfull_adapt"], "a") as myfile:
                             wr = csv.writer(myfile)
-                            wr.writerow([[dirct], [first_hit[local_batch_size_idx]], [best_hit[local_batch_size_idx]], 
-                                [best_eta[local_batch_size_idx][0]], [count_succs[local_batch_size_idx]], [self.alpha], [best_score[local_batch_size_idx].cpu().detach().item()]])
+                            wr.writerow(
+                                [
+                                    [dirct],
+                                    [first_hit[local_batch_size_idx]],
+                                    [best_hit[local_batch_size_idx]],
+                                    [best_eta[local_batch_size_idx][0]],
+                                    [count_succs[local_batch_size_idx]],
+                                    [self.alpha],
+                                    [
+                                        best_score[local_batch_size_idx]
+                                        .cpu()
+                                        .detach()
+                                        .item()
+                                    ],
+                                ]
+                            )
                             myfile.close()
-                    torchaudio.save(save_dirct, successful_adv_input_2[local_batch_size_idx][ :real_lengths[local_batch_size_idx]].detach().cpu()[None, :], self.sample_rate)
+                    torchaudio.save(
+                        save_dirct,
+                        successful_adv_input_2[local_batch_size_idx][
+                            : real_lengths[local_batch_size_idx]
+                        ]
+                        .detach()
+                        .cpu()[None, :],
+                        self.sample_rate,
+                    )
 
         result = torch.stack(successful_adv_input_2)
         batch.sig = original_input, batch.sig[1]
         return result
-    
-########### Tools for forward passes ######################
- 
-    def _get_entropy_mean_differentiable(self, predictions):
-        """Differentiable entropy mean from model output log-probabilities.
-        """
 
-        p_ctc = predictions[0]       
+    ########### Tools for forward passes ######################
+
+    def _get_entropy_mean_differentiable(self, predictions):
+        """Differentiable entropy mean from model output log-probabilities."""
+
+        p_ctc = predictions[0]
         p_ctc_prob = torch.exp(p_ctc)
 
         eps = 1e-8
@@ -654,19 +726,18 @@ class ASR(sb.Brain):
         # Stack into [3] and add batch dim → [1, 3] for Detector's BatchNorm1d(3)
         return torch.stack(characteristics, dim=-1).unsqueeze(0)  # [1, 3]
 
-
-############ Forward passes ##############
+    ############ Forward passes ##############
 
     def forward_1st_stage_adaptive_pure_gaussian(
-            self,
-            original_input: np.ndarray,
-            batch: sb.dataio.batch.PaddedBatch,
-            local_batch_size: int,
-            local_max_length: int,
-            rescale: np.ndarray,
-            input_mask: np.ndarray,
-            hparams,
-            real_lengths: np.ndarray,
+        self,
+        original_input: np.ndarray,
+        batch: sb.dataio.batch.PaddedBatch,
+        local_batch_size: int,
+        local_max_length: int,
+        rescale: np.ndarray,
+        input_mask: np.ndarray,
+        hparams,
+        real_lengths: np.ndarray,
     ):
         """Computes (1 - alpha) * l + alpha * Mahalanobis(gaussian)"""
 
@@ -681,18 +752,14 @@ class ASR(sb.Brain):
         # Compute loss and decoded output
         batch.sig = masked_adv_input, batch.sig[1]
         eval_dtype = AMPConfig.from_name("fp32").dtype
-        self.evaluation_ctx = TorchAutocast(
-            device_type=self.device, dtype=eval_dtype
-        )
+        self.evaluation_ctx = TorchAutocast(device_type=self.device, dtype=eval_dtype)
         with self.evaluation_ctx:
             predictions = self.compute_forward(batch, Stage.ATTACK)
             if hparams["eval_precision"] == "fp32":
                 pred_1 = predictions
             entropy_mean_1 = self._get_entropy_mean_differentiable(predictions)
         eval_dtype = AMPConfig.from_name("fp16").dtype
-        self.evaluation_ctx = TorchAutocast(
-            device_type=self.device, dtype=eval_dtype
-        )
+        self.evaluation_ctx = TorchAutocast(device_type=self.device, dtype=eval_dtype)
         with self.evaluation_ctx:
             predictions = self.compute_forward(batch, Stage.ATTACK)
             if hparams["eval_precision"] == "fp16":
@@ -700,48 +767,56 @@ class ASR(sb.Brain):
             entropy_mean_2 = self._get_entropy_mean_differentiable(predictions)
 
         eval_dtype = AMPConfig.from_name("bf16").dtype
-        self.evaluation_ctx = TorchAutocast(
-            device_type=self.device, dtype=eval_dtype
-        )
+        self.evaluation_ctx = TorchAutocast(device_type=self.device, dtype=eval_dtype)
         with self.evaluation_ctx:
             predictions = self.compute_forward(batch, Stage.ATTACK)
             if hparams["eval_precision"] == "bf16":
                 pred_1 = predictions
             entropy_mean_3 = self._get_entropy_mean_differentiable(predictions)
-        
+
         loss_cw = self.compute_objectives(pred_1, batch, Stage.ATTACK)
 
         loss_1 = self.const * loss_cw + torch.norm(local_delta_rescale)
 
-        entropy_vec = torch.stack([entropy_mean_1, entropy_mean_2, entropy_mean_3], dim=-1)
+        entropy_vec = torch.stack(
+            [entropy_mean_1, entropy_mean_2, entropy_mean_3], dim=-1
+        )
 
         # Mahalanobis distance on 3d-Gaussian
         delta = entropy_vec - self.gaussian_mean_pure
         mahalanobis_sq = torch.sum(
-            delta.unsqueeze(0) @ self.gaussian_precision_pure * delta.unsqueeze(0), dim=-1
+            delta.unsqueeze(0) @ self.gaussian_precision_pure * delta.unsqueeze(0),
+            dim=-1,
         ).squeeze(0)
         loss_2 = mahalanobis_sq
 
         loss = (1 - self.alpha) * loss_1 + self.alpha * loss_2.to(self.device)
 
-        return loss, loss_2, torch.mean(entropy_vec), local_delta, masked_adv_input, local_delta_rescale
-
+        return (
+            loss,
+            loss_2,
+            torch.mean(entropy_vec),
+            local_delta,
+            masked_adv_input,
+            local_delta_rescale,
+        )
 
     def forward_1st_stage_adaptive_pure_nn(
-            self,
-            original_input: np.ndarray,
-            batch: sb.dataio.batch.PaddedBatch,
-            local_batch_size: int,
-            local_max_length: int,
-            rescale: np.ndarray,
-            input_mask: np.ndarray,
-            hparams,
-            real_lengths: np.ndarray,
+        self,
+        original_input: np.ndarray,
+        batch: sb.dataio.batch.PaddedBatch,
+        local_batch_size: int,
+        local_max_length: int,
+        rescale: np.ndarray,
+        input_mask: np.ndarray,
+        hparams,
+        real_lengths: np.ndarray,
     ):
-        """Calculates L = (1 - alpha) * l + alpha * MSE(nn_pred, threshold)
-        """
+        """Calculates L = (1 - alpha) * l + alpha * MSE(nn_pred, threshold)"""
         local_delta = self.global_optimal_delta[:local_batch_size, :local_max_length]
-        local_delta_rescale = torch.clamp(local_delta, -self.eps, self.eps).to(self.device)
+        local_delta_rescale = torch.clamp(local_delta, -self.eps, self.eps).to(
+            self.device
+        )
         local_delta_rescale *= torch.tensor(rescale).to(self.device)
         adv_input = local_delta_rescale + torch.tensor(original_input).to(self.device)
         masked_adv_input = adv_input * torch.tensor(input_mask).to(self.device)
@@ -749,18 +824,14 @@ class ASR(sb.Brain):
 
         batch.sig = masked_adv_input, batch.sig[1]
         eval_dtype = AMPConfig.from_name("fp32").dtype
-        self.evaluation_ctx = TorchAutocast(
-            device_type=self.device, dtype=eval_dtype
-        )
+        self.evaluation_ctx = TorchAutocast(device_type=self.device, dtype=eval_dtype)
         with self.evaluation_ctx:
             predictions = self.compute_forward(batch, Stage.ATTACK)
             if hparams["eval_precision"] == "fp32":
                 pred_1 = predictions
             entropy_mean_1 = self._get_entropy_mean_differentiable(predictions)
         eval_dtype = AMPConfig.from_name("fp16").dtype
-        self.evaluation_ctx = TorchAutocast(
-            device_type=self.device, dtype=eval_dtype
-        )
+        self.evaluation_ctx = TorchAutocast(device_type=self.device, dtype=eval_dtype)
         with self.evaluation_ctx:
             predictions = self.compute_forward(batch, Stage.ATTACK)
             if hparams["eval_precision"] == "fp16":
@@ -768,44 +839,51 @@ class ASR(sb.Brain):
             entropy_mean_2 = self._get_entropy_mean_differentiable(predictions)
 
         eval_dtype = AMPConfig.from_name("bf16").dtype
-        self.evaluation_ctx = TorchAutocast(
-            device_type=self.device, dtype=eval_dtype
-        )
+        self.evaluation_ctx = TorchAutocast(device_type=self.device, dtype=eval_dtype)
         with self.evaluation_ctx:
             predictions = self.compute_forward(batch, Stage.ATTACK)
             if hparams["eval_precision"] == "bf16":
                 pred_1 = predictions
             entropy_mean_3 = self._get_entropy_mean_differentiable(predictions)
-        
+
         loss_cw = self.compute_objectives(pred_1, batch, Stage.ATTACK)
 
         loss_1 = self.const * loss_cw + torch.norm(local_delta_rescale)
 
-        entropy_vec = torch.stack([entropy_mean_1, entropy_mean_2, entropy_mean_3], dim=-1)
+        entropy_vec = torch.stack(
+            [entropy_mean_1, entropy_mean_2, entropy_mean_3], dim=-1
+        )
 
         detector_out = self.detector_pure_nn(entropy_vec)
         boundary_target = torch.full_like(detector_out, self.detector_pure_threshold)
         detector_loss = torch.nn.functional.mse_loss(detector_out, boundary_target)
 
         total_loss = (1.0 - self.alpha) * loss_1 + self.alpha * detector_loss
-        return total_loss, detector_loss, torch.mean(entropy_vec), local_delta, masked_adv_input, local_delta_rescale
-
+        return (
+            total_loss,
+            detector_loss,
+            torch.mean(entropy_vec),
+            local_delta,
+            masked_adv_input,
+            local_delta_rescale,
+        )
 
     def forward_1st_stage_adaptive_separate_nn(
-            self,
-            original_input: np.ndarray,
-            batch: sb.dataio.batch.PaddedBatch,
-            local_batch_size: int,
-            local_max_length: int,
-            rescale: np.ndarray,
-            input_mask: np.ndarray,
-            hparams,
-            real_lengths: np.ndarray,
+        self,
+        original_input: np.ndarray,
+        batch: sb.dataio.batch.PaddedBatch,
+        local_batch_size: int,
+        local_max_length: int,
+        rescale: np.ndarray,
+        input_mask: np.ndarray,
+        hparams,
+        real_lengths: np.ndarray,
     ):
-        """Calculates L = (1 - alpha) * l + alpha * MSE(nn_pred, threshold)
-        """
+        """Calculates L = (1 - alpha) * l + alpha * MSE(nn_pred, threshold)"""
         local_delta = self.global_optimal_delta[:local_batch_size, :local_max_length]
-        local_delta_rescale = torch.clamp(local_delta, -self.eps, self.eps).to(self.device)
+        local_delta_rescale = torch.clamp(local_delta, -self.eps, self.eps).to(
+            self.device
+        )
         local_delta_rescale *= torch.tensor(rescale).to(self.device)
         adv_input = local_delta_rescale + torch.tensor(original_input).to(self.device)
         masked_adv_input = adv_input * torch.tensor(input_mask).to(self.device)
@@ -827,27 +905,38 @@ class ASR(sb.Brain):
         combined_features = torch.stack([pvp_wer, entropy_mean]).unsqueeze(0)
 
         detector_out = self.detector_separate_nn(combined_features)
-        boundary_target = torch.full_like(detector_out, self.detector_separate_threshold)
+        boundary_target = torch.full_like(
+            detector_out, self.detector_separate_threshold
+        )
         detector_loss = torch.nn.functional.mse_loss(detector_out, boundary_target)
 
         total_loss = (1.0 - self.alpha) * cw_loss + self.alpha * detector_loss
-        return total_loss, detector_loss, entropy_mean, local_delta, masked_adv_input, local_delta_rescale
+        return (
+            total_loss,
+            detector_loss,
+            entropy_mean,
+            local_delta,
+            masked_adv_input,
+            local_delta_rescale,
+        )
 
     def forward_1st_stage_adaptive_separate_gaussian(
-            self,
-            original_input: np.ndarray,
-            batch: sb.dataio.batch.PaddedBatch,
-            local_batch_size: int,
-            local_max_length: int,
-            rescale: np.ndarray,
-            input_mask: np.ndarray,
-            hparams,
-            real_lengths: np.ndarray,
+        self,
+        original_input: np.ndarray,
+        batch: sb.dataio.batch.PaddedBatch,
+        local_batch_size: int,
+        local_max_length: int,
+        rescale: np.ndarray,
+        input_mask: np.ndarray,
+        hparams,
+        real_lengths: np.ndarray,
     ):
         """Computes (1 - alpha) * l + alpha * Malahanobis (gaussian)"""
 
         local_delta = self.global_optimal_delta[:local_batch_size, :local_max_length]
-        local_delta_rescale = torch.clamp(local_delta, -self.eps, self.eps).to(self.device)
+        local_delta_rescale = torch.clamp(local_delta, -self.eps, self.eps).to(
+            self.device
+        )
         local_delta_rescale *= torch.tensor(rescale).to(self.device)
         adv_input = local_delta_rescale + torch.tensor(original_input).to(self.device)
         masked_adv_input = adv_input * torch.tensor(input_mask).to(self.device)
@@ -875,11 +964,18 @@ class ASR(sb.Brain):
         detector_loss = torch.mean(mahalanobis_sq)
 
         total_loss = (1.0 - self.alpha) * cw_loss + self.alpha * detector_loss
-        return total_loss, detector_loss, entropy_mean, local_delta, masked_adv_input, local_delta_rescale
-
+        return (
+            total_loss,
+            detector_loss,
+            entropy_mean,
+            local_delta,
+            masked_adv_input,
+            local_delta_rescale,
+        )
 
 
 ############ dataio ################
+
 
 def dataio_prepare(hparams, tokenizer):
     """This function prepares the datasets to be used in the brain class.
@@ -916,9 +1012,7 @@ def dataio_prepare(hparams, tokenizer):
         pass
 
     else:
-        raise NotImplementedError(
-            "sorting must be random, ascending or descending"
-        )
+        raise NotImplementedError("sorting must be random, ascending or descending")
 
     valid_data = sb.dataio.dataset.DynamicItemDataset.from_csv(
         csv_path=hparams["valid_csv"],
@@ -1023,9 +1117,7 @@ def dataio_prepare_2(hparams, file_path, tokenizer):
         hparams["dataloader_options"]["shuffle"] = False
 
     elif hparams["sorting"] == "descending":
-        train_data = train_data.filtered_sorted(
-            sort_key="duration", reverse=True
-        )
+        train_data = train_data.filtered_sorted(sort_key="duration", reverse=True)
         # when sorting do not shuffle in dataloader ! otherwise is pointless
         hparams["dataloader_options"]["shuffle"] = False
 
@@ -1033,9 +1125,7 @@ def dataio_prepare_2(hparams, file_path, tokenizer):
         pass
 
     else:
-        raise NotImplementedError(
-            "sorting must be random, ascending or descending"
-        )
+        raise NotImplementedError("sorting must be random, ascending or descending")
 
     datasets = [train_data]
 
@@ -1105,16 +1195,18 @@ def dataio_prepare_2(hparams, file_path, tokenizer):
 
 
 if __name__ == "__main__":
-
     print("AA ", torch.cuda.device_count())
     use_cuda = torch.cuda.is_available()
     print(use_cuda)
     if use_cuda:
-        print('__CUDNN VERSION:', torch.backends.cudnn.version())
-        print('__Number CUDA Devices:', torch.cuda.device_count())
-        print('__CUDA Device Name:',torch.cuda.get_device_name(0))
-        print('__CUDA Device Total Memory [GB]:',torch.cuda.get_device_properties(0).total_memory)
-    
+        print("__CUDNN VERSION:", torch.backends.cudnn.version())
+        print("__Number CUDA Devices:", torch.cuda.device_count())
+        print("__CUDA Device Name:", torch.cuda.get_device_name(0))
+        print(
+            "__CUDA Device Total Memory [GB]:",
+            torch.cuda.get_device_properties(0).total_memory,
+        )
+
     # CLI:
     hparams_file, run_opts, overrides = sb.parse_arguments(sys.argv[1:])
 
@@ -1163,7 +1255,6 @@ if __name__ == "__main__":
         train_bsampler,
         valid_bsampler,
     ) = dataio_prepare(hparams, tokenizer)
-   
 
     # Trainer initialization
     asr_brain = ASR(
@@ -1182,9 +1273,7 @@ if __name__ == "__main__":
     # NB: This tokenizer corresponds to the one used for the LM!!
     asr_brain.tokenizer = tokenizer
 
-    vocab_list = [
-        tokenizer.sp.id_to_piece(i) for i in range(tokenizer.sp.vocab_size())
-    ]
+    vocab_list = [tokenizer.sp.id_to_piece(i) for i in range(tokenizer.sp.vocab_size())]
 
     from speechbrain.decoders.ctc import CTCBeamSearcher
 
@@ -1193,25 +1282,29 @@ if __name__ == "__main__":
         vocab_list=vocab_list,
     )
 
-    
-    cw_data, _ = dataio_prepare_2(hparams, hparams["cw_audio_adv_transcripts"], tokenizer)
+    cw_data, _ = dataio_prepare_2(
+        hparams, hparams["cw_audio_adv_transcripts"], tokenizer
+    )
     asr_brain.attack(
         cw_data,
         hparams=hparams,
         train_loader_kwargs=hparams["test_dataloader_options"],
-        )
-    
-    if not os.path.exists(hparams["output_wer_folder"]): 
+    )
+
+    if not os.path.exists(hparams["output_wer_folder"]):
         os.makedirs(hparams["output_wer_folder"])
-    adv_test_data, label_encoder = dataio_prepare_2(hparams, hparams["adv_audio_adv_transcripts"], tokenizer)
-    
+    adv_test_data, label_encoder = dataio_prepare_2(
+        hparams, hparams["adv_audio_adv_transcripts"], tokenizer
+    )
+
     asr_brain.hparams.test_wer_file = os.path.join(
         hparams["output_wer_folder"], hparams["adv_WER"]
     )
-    print(f"PRECISION {hparams["precision"]}, EVAL PRECISION {hparams["eval_precision"]}")
+    print(
+        f"PRECISION {hparams['precision']}, EVAL PRECISION {hparams['eval_precision']}"
+    )
     asr_brain.evaluate(
         adv_test_data,
         test_loader_kwargs=hparams["test_dataloader_options"],
         min_key="WER",
     )
-    
